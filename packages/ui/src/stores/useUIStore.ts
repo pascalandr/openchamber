@@ -18,6 +18,7 @@ export type ContextPanelMode = 'diff' | 'file' | 'context' | 'plan' | 'chat' | '
 export type MermaidRenderingMode = 'svg' | 'ascii';
 export type UserMessageRenderingMode = 'markdown' | 'plain';
 export type ChatRenderMode = 'sorted' | 'live';
+export type ChatMessageWidthMode = 'narrow' | 'wide' | 'fluid';
 export type ActivityRenderMode = 'collapsed' | 'summary';
 export type SessionRetentionAction = 'archive' | 'delete';
 export type TimeFormatPreference = 'auto' | '12h' | '24h';
@@ -28,6 +29,11 @@ export type FileEditorKeymap = 'default' | 'vim';
 
 function normalizeFileEditorKeymap(value: unknown): FileEditorKeymap {
   return value === 'vim' ? 'vim' : 'default';
+}
+
+export function normalizeChatMessageWidthMode(value: unknown): ChatMessageWidthMode {
+  if (value === 'wide' || value === 'fluid') return value;
+  return 'narrow';
 }
 
 type ContextPanelTab = {
@@ -688,7 +694,7 @@ interface UIStore {
   showOpenCodeUpdateNotifications: boolean;
   agentControlToolEnabled: boolean;
   inputSpellcheckEnabled: boolean;
-  wideChatLayoutEnabled: boolean;
+  chatMessageWidthMode: ChatMessageWidthMode;
   codeBlockLineWrap: boolean;
   showToolFileIcons: boolean;
   showTurnChangedFiles: boolean;
@@ -851,7 +857,7 @@ interface UIStore {
   setShowOpenCodeUpdateNotifications: (value: boolean) => void;
   setAgentControlToolEnabled: (value: boolean) => void;
   setInputSpellcheckEnabled: (value: boolean) => void;
-  setWideChatLayoutEnabled: (value: boolean) => void;
+  setChatMessageWidthMode: (value: ChatMessageWidthMode) => void;
   setCodeBlockLineWrap: (value: boolean) => void;
   setShowToolFileIcons: (value: boolean) => void;
   setShowTurnChangedFiles: (value: boolean) => void;
@@ -1003,7 +1009,7 @@ export const useUIStore = create<UIStore>()(
         showOpenCodeUpdateNotifications: !isWindowsArm64(),
         agentControlToolEnabled: true,
         inputSpellcheckEnabled: false,
-        wideChatLayoutEnabled: false,
+        chatMessageWidthMode: 'narrow',
         codeBlockLineWrap: true,
         showToolFileIcons: true,
         showTurnChangedFiles: false,
@@ -2153,8 +2159,8 @@ export const useUIStore = create<UIStore>()(
         setInputSpellcheckEnabled: (value) => {
           set({ inputSpellcheckEnabled: value });
         },
-        setWideChatLayoutEnabled: (value) => {
-          set({ wideChatLayoutEnabled: value });
+        setChatMessageWidthMode: (value) => {
+          set({ chatMessageWidthMode: normalizeChatMessageWidthMode(value) });
         },
         setCodeBlockLineWrap: (value) => {
           set({ codeBlockLineWrap: value });
@@ -2263,12 +2269,20 @@ export const useUIStore = create<UIStore>()(
       {
         name: 'ui-store',
         storage: createDeferredSafeJSONStorage(),
-        version: 13,
+        version: 14,
         migrate: (persistedState, version) => {
           if (!persistedState || typeof persistedState !== 'object') {
             return persistedState;
           }
           const state = persistedState as Record<string, unknown>;
+
+          // v13 -> v14: replace the old boolean wide layout toggle with a width mode.
+          if (version < 14) {
+            if (state.chatMessageWidthMode !== 'wide' && state.chatMessageWidthMode !== 'fluid') {
+              state.chatMessageWidthMode = state.wideChatLayoutEnabled === true ? 'wide' : 'narrow';
+            }
+            delete state.wideChatLayoutEnabled;
+          }
 
           // v12 -> v13: promote FilesView localStorage autosave toggle into the store.
           if (version < 13) {
@@ -2387,6 +2401,7 @@ export const useUIStore = create<UIStore>()(
           }
 
           state.fileEditorKeymap = normalizeFileEditorKeymap(state.fileEditorKeymap);
+          state.chatMessageWidthMode = normalizeChatMessageWidthMode(state.chatMessageWidthMode);
 
           if (typeof state.autoSaveEnabled !== 'boolean') {
             state.autoSaveEnabled = true;
@@ -2470,7 +2485,7 @@ export const useUIStore = create<UIStore>()(
           showOpenCodeUpdateNotifications: state.showOpenCodeUpdateNotifications,
           agentControlToolEnabled: state.agentControlToolEnabled,
           inputSpellcheckEnabled: state.inputSpellcheckEnabled,
-          wideChatLayoutEnabled: state.wideChatLayoutEnabled,
+          chatMessageWidthMode: state.chatMessageWidthMode,
           codeBlockLineWrap: state.codeBlockLineWrap,
           showToolFileIcons: state.showToolFileIcons,
           showTurnChangedFiles: state.showTurnChangedFiles,
